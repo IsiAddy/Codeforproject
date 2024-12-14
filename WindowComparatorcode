@@ -1,0 +1,100 @@
+// Define pins for comparators
+const int compLow = 6;   // Comparator for 20°C threshold
+const int compHigh = 7;  // Comparator for 30°C threshold
+
+// Define pins for motor control via transistor
+const int pwmPin = 11;  // PWM pin for controlling transistor (fan control)
+
+// Define pins for RPM measurement
+const int sensorPin = 2;  // IR sensor or pulse sensor pin for RPM detection
+
+// Motor speed control (PWM values)
+int fullSpeed = 255;  // Full speed (100% duty cycle)
+int halfSpeed = 128;  // Half speed (50% duty cycle)
+
+// Variables for RPM calculation
+unsigned long pulseInterval = 0;  // Time between pulses in microseconds
+unsigned long lastPulseTime = 0;  // Last time pulse was detected
+float rpm = 0;  // RPM variable
+const int maxRPM = 3000;  // Maximum RPM value
+
+// Function to calculate RPM from pulse interval
+int calculateRPM(unsigned long interval) {
+  // Ensure the RPM is scaled to a maximum of 3000
+  // We calculate RPM based on pulse interval, but we scale it to maxRPM (3000)
+  return maxRPM * (6000000.0 / interval);  // RPM calculation based on pulse interval
+}
+
+void setup() {
+  Serial.begin(9600);  // Initialize Serial Monitor
+  pinMode(compLow, INPUT);  // Set comparator pins as inputs
+  pinMode(compHigh, INPUT);
+  
+  pinMode(pwmPin, OUTPUT);  // PWM pin for motor control
+
+  pinMode(sensorPin, INPUT);  // Set RPM sensor pin as input
+
+  Serial.println("System Initialized");
+  delay(2000);  // Wait for 2 seconds before starting
+}
+
+void loop() {
+  // Read the states of the comparators
+  bool lowThreshold = digitalRead(compLow);    // Comparator for 20°C
+  bool highThreshold = digitalRead(compHigh);  // Comparator for 30°C
+  
+  // Check the comparator states to determine the temperature status
+  if (lowThreshold == LOW && highThreshold == HIGH) {
+    // Below 20°C
+    Serial.println("Temperature Status: BELOW 20°C");
+    analogWrite(pwmPin, 0);  // Turn off fan (no PWM)
+    Serial.println("Fan Status: OFF");
+  } 
+  else if (lowThreshold == HIGH && highThreshold == HIGH) {
+    // Within 20°C - 30°C
+    Serial.println("Temperature Status: WITHIN 20°C - 30°C");
+    analogWrite(pwmPin, 0);  // Turn off fan (no PWM)
+    Serial.println("Fan Status: OFF");
+  } 
+  else if (lowThreshold == HIGH && highThreshold == LOW) {
+    // Above 30°C
+    Serial.println("Temperature Status: ABOVE 30°C");
+    
+    // Alternate between full speed and half speed with delay
+    analogWrite(pwmPin, fullSpeed);  // Full speed PWM signal to transistor
+    Serial.println("Fan Status: ON at FULL SPEED");
+
+    // RPM calculation based on pulse interval only when temperature is above 30°C
+    if (pulseInterval != 0) {
+      rpm = calculateRPM(pulseInterval);
+      Serial.print("RPM: ");
+      Serial.println(rpm);
+    }
+
+    // Delay for full speed for 5 seconds
+    delay(5000);  // Run at full speed for 5 seconds
+    
+    analogWrite(pwmPin, halfSpeed);  // Half speed PWM signal to transistor
+    Serial.println("Fan Status: ON at HALF SPEED");
+
+    // RPM calculation for half speed
+    if (pulseInterval != 0) {
+      rpm = calculateRPM(pulseInterval);
+      Serial.print("RPM: ");
+      Serial.println(rpm);
+    }
+
+    // Delay for half speed for 5 seconds
+    delay(5000);  // Run at half speed for 5 seconds
+  }
+
+  // RPM measurement logic
+  if (digitalRead(sensorPin) == HIGH) {  // Detect pulse from sensor
+    unsigned long pulseTime = micros();
+    pulseInterval = pulseTime - lastPulseTime;
+    lastPulseTime = pulseTime;
+  }
+
+  delay(500);  // Small delay to update the status every 500 milliseconds
+}
+
